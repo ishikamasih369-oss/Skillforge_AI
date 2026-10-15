@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from schemas import CourseCreate, CourseResponse, MyCourseResponse,ProgressUpdate
+from schemas import CourseCreate, CourseResponse, MyCourseResponse, ProgressUpdate
 from database import get_db
-from models import Course, UserCourse
-from schemas import CourseCreate, CourseResponse
+from models import Course, User, UserCourse
 from auth import get_current_user
-from models import User
+
 router = APIRouter(prefix="/api/courses", tags=["Courses"])
 
 
 @router.post("/", response_model=CourseResponse)
-def create_course(course: CourseCreate, db: Session = Depends(get_db)):
+def create_course(
+    course: CourseCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     new_course = Course(
         title=course.title,
         description=course.description,
@@ -76,6 +79,7 @@ def get_course(course_id: int, db: Session = Depends(get_db)):
 def update_course(
     course_id: int,
     course_data: CourseCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     course = db.query(Course).filter(Course.id == course_id).first()
@@ -99,6 +103,7 @@ def update_course(
 @router.delete("/{course_id}")
 def delete_course(
     course_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     course = db.query(Course).filter(Course.id == course_id).first()

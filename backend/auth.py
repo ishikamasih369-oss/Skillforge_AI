@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta, timezone
+import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,14 +11,34 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
-from schemas import UserCreate, UserResponse
+from schemas import LoginRequest, UserCreate, UserResponse
+
+# Ensure .env is reliably loaded regardless of the current working directory
+_backend_dir = Path(__file__).resolve().parent
+_backend_env = _backend_dir / ".env"
+_root_env = _backend_dir.parent / ".env"
+
+if _root_env.is_file():
+    load_dotenv(dotenv_path=_root_env)
+if _backend_env.is_file():
+    load_dotenv(dotenv_path=_backend_env, override=True)
+else:
+    load_dotenv()
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 password_hash = PasswordHash.recommended()
 security = HTTPBearer()
 
-SECRET_KEY = "skillforge-ai-secret-key-change-this-later"
+SECRET_KEY = os.getenv("SECRET_KEY")
+if SECRET_KEY:
+    SECRET_KEY = SECRET_KEY.strip()
+
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY is not set. Please set the SECRET_KEY environment variable in backend/.env"
+    )
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -115,13 +138,12 @@ def register(
 
 @router.post("/login")
 def login(
-    email: str,
-    password: str,
+    credentials: LoginRequest,
     db: Session = Depends(get_db)
 ):
     user = (
         db.query(User)
-        .filter(User.email == email)
+        .filter(User.email == credentials.email)
         .first()
     )
 
@@ -131,7 +153,7 @@ def login(
             detail="Invalid email or password"
         )
 
-    if not password_hash.verify(password, user.password_hash):
+    if not password_hash.verify(credentials.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"

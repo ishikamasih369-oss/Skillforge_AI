@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #090a0f;
+    --foreground: #f8fafc;
+    --surface: #11141e;
+    --surface-hover: #171b28;
+    --border: #222638;
+    --border-highlight: #353b52;
+    --accent-pink: #ec4899;
+    --accent-rose: #f43f5e;
+    --accent-fuchsia: #d946ef;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    min-height: 100vh;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom dark scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #090a0f;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1f2434;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #333a52;
+  }
+}
+
+/* Subtle glow utilities */
+.glow-subtle-pink {
+  box-shadow: 0 0 40px -10px rgba(236, 72, 153, 0.15);
+}
+
+.glow-card-hover {
+  transition: all 0.2s ease-in-out;
+}
+.glow-card-hover:hover {
+  border-color: rgba(236, 72, 153, 0.4);
+  box-shadow: 0 8px 30px -8px rgba(236, 72, 153, 0.15);
+  transform: translateY(-2px);
+}
