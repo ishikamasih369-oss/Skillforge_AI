@@ -140,3 +140,52 @@ class Note(Base):
         onupdate=datetime.utcnow,
         nullable=False
     )
+
+
+class StudySession(Base):
+    __tablename__ = "study_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    course_id = Column(Integer, nullable=True, index=True)
+    skill_name = Column(String(150), nullable=False)
+
+    start_time = Column(DateTime, nullable=False, default=datetime.utcnow)
+    end_time = Column(DateTime, nullable=True)
+    duration_seconds = Column(Integer, default=0, nullable=False)
+
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    is_paused = Column(Boolean, default=False, nullable=False)
+    last_resumed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False
+    )
+
+
+class CourseLesson(Base):
+    __tablename__ = "course_lessons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    course_id = Column(Integer, nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(String(1000), nullable=False)
+    order_index = Column(Integer, default=1, nullable=False)
+    duration_minutes = Column(Integer, default=30, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class UserLessonCompletion(Base):
+    __tablename__ = "user_lesson_completions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    course_id = Column(Integer, nullable=False, index=True)
+    lesson_id = Column(Integer, nullable=False, index=True)
+    completed = Column(Boolean, default=True, nullable=False)
+    completed_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -1,9 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from schemas import CourseCreate, CourseResponse, MyCourseResponse, ProgressUpdate
+from schemas import (
+    CourseCreate,
+    CourseLessonsProgressResponse,
+    CourseResponse,
+    LessonResponse,
+    MyCourseResponse,
+    ProgressUpdate,
+)
 from database import get_db
-from models import Course, User, UserCourse
-from auth import get_current_user
+from models import Course, CourseLesson, User, UserCourse, UserLessonCompletion
+from auth import get_current_user, get_optional_current_user
 
 router = APIRouter(prefix="/api/courses", tags=["Courses"])
 
@@ -204,4 +213,215 @@ def update_progress(
         "course_id": course_id,
         "progress": enrollment.progress,
         "completed": enrollment.completed
+    }
+
+
+@router.get("/{course_id}/lessons", response_model=CourseLessonsProgressResponse)
+def get_course_lessons(
+    course_id: int,
+    current_user: User | None = Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve all structured lessons/milestones for a course, annotated with completion state for the user."""
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        )
+
+    lessons = (
+        db.query(CourseLesson)
+        .filter(CourseLesson.course_id == course_id)
+        .order_by(CourseLesson.order_index.asc())
+        .all()
+    )
+
+    completed_map: dict[int, datetime] = {}
+    if current_user:
+        completions = (
+            db.query(UserLessonCompletion)
+            .filter(
+                UserLessonCompletion.course_id == course_id,
+                UserLessonCompletion.user_id == current_user.id,
+                UserLessonCompletion.completed == True,
+            )
+            .all()
+        )
+        for c in completions:
+            completed_map[c.lesson_id] = c.completed_at
+
+    total_lessons = len(lessons)
+    completed_count = len(completed_map)
+    progress_percent = (
+        int(round((completed_count / total_lessons) * 100))
+        if total_lessons > 0
+        else 0
+    )
+    is_completed = (progress_percent == 100) if total_lessons > 0 else False
+
+    annotated_lessons = [
+        {
+            "id": lesson.id,
+            "course_id": lesson.course_id,
+            "title": lesson.title,
+            "description": lesson.description,
+            "order_index": lesson.order_index,
+            "duration_minutes": lesson.duration_minutes,
+            "is_completed": lesson.id in completed_map,
+            "completed_at": completed_map.get(lesson.id),
+        }
+        for lesson in lessons
+    ]
+
+    return {
+        "course_id": course_id,
+        "total_lessons": total_lessons,
+        "completed_lessons": completed_count,
+        "progress_percent": progress_percent,
+        "completed": is_completed,
+        "lessons": annotated_lessons,
+    }
+
+
+@router.post("/{course_id}/lessons/{lesson_id}/toggle", response_model=CourseLessonsProgressResponse)
+def toggle_course_lesson(
+    course_id: int,
+    lesson_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Toggle completion of a lesson milestone and recalculate overall course progress percentage."""
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        )
+
+    lesson = (
+        db.query(CourseLesson)
+        .filter(
+            CourseLesson.id == lesson_id,
+            CourseLesson.course_id == course_id,
+        )
+        .first()
+    )
+    if not lesson:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lesson milestone not found for this course",
+        )
+
+    completion = (
+        db.query(UserLessonCompletion)
+        .filter(
+            UserLessonCompletion.user_id == current_user.id,
+            UserLessonCompletion.course_id == course_id,
+            UserLessonCompletion.lesson_id == lesson_id,
+        )
+        .first()
+    )
+
+    now = datetime.utcnow()
+    if completion:
+        completion.completed = not completion.completed
+        completion.completed_at = now if completion.completed else completion.completed_at
+    else:
+        completion = UserLessonCompletion(
+            user_id=current_user.id,
+            course_id=course_id,
+            lesson_id=lesson_id,
+            completed=True,
+            completed_at=now,
+        )
+        db.add(completion)
+
+    db.commit()
+
+    # Recalculate progress across all lessons for this course
+    total_lessons = (
+        db.query(CourseLesson)
+        .filter(CourseLesson.course_id == course_id)
+        .count()
+    )
+    completed_count = (
+        db.query(UserLessonCompletion)
+        .filter(
+            UserLessonCompletion.user_id == current_user.id,
+            UserLessonCompletion.course_id == course_id,
+            UserLessonCompletion.completed == True,
+        )
+        .count()
+    )
+
+    progress_percent = (
+        int(round((completed_count / total_lessons) * 100))
+        if total_lessons > 0
+        else 0
+    )
+    is_completed = (progress_percent == 100) if total_lessons > 0 else False
+
+    # Synchronize UserCourse enrollment record automatically
+    enrollment = (
+        db.query(UserCourse)
+        .filter(
+            UserCourse.user_id == current_user.id,
+            UserCourse.course_id == course_id,
+        )
+        .first()
+    )
+    if enrollment:
+        enrollment.progress = progress_percent
+        enrollment.completed = is_completed
+    else:
+        enrollment = UserCourse(
+            user_id=current_user.id,
+            course_id=course_id,
+            progress=progress_percent,
+            completed=is_completed,
+        )
+        db.add(enrollment)
+
+    db.commit()
+
+    # Return full updated progress response
+    all_lessons = (
+        db.query(CourseLesson)
+        .filter(CourseLesson.course_id == course_id)
+        .order_by(CourseLesson.order_index.asc())
+        .all()
+    )
+    active_completions = (
+        db.query(UserLessonCompletion)
+        .filter(
+            UserLessonCompletion.user_id == current_user.id,
+            UserLessonCompletion.course_id == course_id,
+            UserLessonCompletion.completed == True,
+        )
+        .all()
+    )
+    active_map = {c.lesson_id: c.completed_at for c in active_completions}
+
+    annotated = [
+        {
+            "id": l.id,
+            "course_id": l.course_id,
+            "title": l.title,
+            "description": l.description,
+            "order_index": l.order_index,
+            "duration_minutes": l.duration_minutes,
+            "is_completed": l.id in active_map,
+            "completed_at": active_map.get(l.id),
+        }
+        for l in all_lessons
+    ]
+
+    return {
+        "course_id": course_id,
+        "total_lessons": total_lessons,
+        "completed_lessons": completed_count,
+        "progress_percent": progress_percent,
+        "completed": is_completed,
+        "lessons": annotated,
     }

@@ -263,3 +263,68 @@ class CareerRoadmapResponse(BaseModel):
         "Timelines and durations are estimates based on your available study time. "
         "Roadmaps guide skill progression and do not guarantee internship or job offers."
     )
+
+
+# ==========================================
+# Study Session Schemas
+# ==========================================
+
+class StudySessionStartRequest(BaseModel):
+    course_id: int | None = None
+    skill_name: str = Field(min_length=1, max_length=150)
+
+
+class StudySessionUpdateRequest(BaseModel):
+    duration_seconds: int = Field(ge=0, description="Corrected duration in seconds")
+    skill_name: str | None = Field(default=None, min_length=1, max_length=150)
+
+
+class StudySessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    course_id: int | None
+    course_title: str | None = None
+    skill_name: str
+    start_time: datetime
+    end_time: datetime | None
+    duration_seconds: int
+    is_active: bool
+    is_paused: bool
+    current_elapsed_seconds: int = 0
+    created_at: datetime
+
+
+class StudyStatsResponse(BaseModel):
+    today_study_seconds: int
+    week_study_seconds: int
+    current_streak_days: int
+    total_sessions_count: int
+    recent_sessions: list[StudySessionResponse]
+
+
+# ==========================================
+# Course Lesson & Milestone Schemas
+# ==========================================
+
+class LessonResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    course_id: int
+    title: str
+    description: str
+    order_index: int
+    duration_minutes: int
+    is_completed: bool = False
+    completed_at: datetime | None = None
+
+
+class CourseLessonsProgressResponse(BaseModel):
+    course_id: int
+    total_lessons: int
+    completed_lessons: int
+    progress_percent: int
+    completed: bool
+    lessons: list[LessonResponse]

@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   LayoutDashboard,
   Zap,
+  Flame,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { apiClient, ApiError } from "@/lib/api-client";
 import type { DashboardSummary } from "@/lib/types/auth";
+import { StudyTimer } from "@/components/study-timer";
+
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -476,26 +479,54 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Backend Connectivity Status Card */}
+            {/* Daily Study Streak & Today's Study Time Card */}
             <Card className="bg-[#11141E] border-[#202536]">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>FastAPI & PostgreSQL</span>
-                  <Sparkles className="w-4 h-4 text-pink-400" />
+                  <span>Study Time Today</span>
+                  <Flame className="w-4 h-4 text-amber-400" />
                 </div>
-                <CardTitle className="text-2xl font-bold text-emerald-400 mt-1 flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Connected
+                <CardTitle className="text-2xl font-bold text-white mt-1 flex items-center justify-between">
+                  <span>
+                    {isSummaryLoading ? (
+                      <span className="inline-block w-12 h-6 bg-[#1A1F30] rounded animate-pulse" />
+                    ) : summary?.study_stats ? (
+                      summary.study_stats.today_study_seconds >= 3600
+                        ? `${Math.floor(summary.study_stats.today_study_seconds / 3600)}h ${Math.floor((summary.study_stats.today_study_seconds % 3600) / 60)}m`
+                        : `${Math.floor(summary.study_stats.today_study_seconds / 60)}m`
+                    ) : (
+                      "0m"
+                    )}
+                  </span>
+                  <Badge variant="glow" className="text-xs text-amber-400 border-amber-500/30">
+                    {summary?.study_stats?.current_streak_days ?? 0}d Streak
+                  </Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-slate-400">
-                  User: {user?.email}
+                  {summary?.study_stats?.week_study_seconds
+                    ? `${Math.round((summary.study_stats.week_study_seconds / 3600) * 10) / 10}h studied this week`
+                    : "No recorded study sessions this week"}
                 </p>
               </CardContent>
             </Card>
           </div>
         </div>
+
+        {/* Interactive Study Timer & Focus Session Tracker */}
+        <section aria-label="Deep Work & Study Timer">
+          <StudyTimer
+            token={token}
+            courses={
+              summary?.courses.list?.map((c) => ({
+                id: c.course_id,
+                title: c.title,
+              })) || []
+            }
+            onSessionCompleted={handleRefresh}
+          />
+        </section>
 
         {/* Detailed Sections Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

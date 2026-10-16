@@ -178,6 +178,11 @@ class AIService:
                 getattr(err, "status_code", "unknown"),
             )
             err_msg = str(err.error).lower()
+            if getattr(err, "status_code", 0) == 429 or "rate limit" in err_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="AI inference provider rate limit exceeded. Please wait a moment before trying again.",
+                )
             if getattr(err, "status_code", 0) == 404 or "not found" in err_msg:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -196,7 +201,8 @@ class AIService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=(
                     f"Ollama service is not running or unreachable at {self.base_url}. "
-                    "Please ensure Ollama is started locally (`ollama serve`)."
+                    "In production, configure an accessible cloud inference endpoint via OLLAMA_BASE_URL. "
+                    "For local development, ensure Ollama is started locally (`ollama serve`)."
                 ),
             )
         except (httpx.TimeoutException, TimeoutError) as err:

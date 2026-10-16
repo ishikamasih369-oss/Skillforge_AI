@@ -25,6 +25,14 @@ export interface DashboardSummary {
   courses: {
     enrolled: number;
     completed: number;
+    list?: Array<{
+      course_id: number;
+      title: string;
+      category: string;
+      difficulty: string;
+      progress: number;
+      completed: boolean;
+    }>;
   };
   internships: {
     total: number;
@@ -40,6 +48,32 @@ export interface DashboardSummary {
     completed_minutes: number;
     completed: boolean;
   };
+  study_stats?: {
+    today_study_seconds: number;
+    week_study_seconds: number;
+    current_streak_days: number;
+    total_sessions_count: number;
+  };
+  active_session?: {
+    id: number;
+    course_id: number | null;
+    course_title: string | null;
+    skill_name: string;
+    start_time: string;
+    duration_seconds: number;
+    current_elapsed_seconds: number;
+    is_active: boolean;
+    is_paused: boolean;
+  } | null;
+  recent_sessions?: Array<{
+    id: number;
+    course_id: number | null;
+    course_title: string | null;
+    skill_name: string;
+    start_time: string;
+    end_time: string | null;
+    duration_seconds: number;
+  }>;
 }
 
 export interface ApiValidationErrorItem {
@@ -59,4 +93,5 @@ export * from "./goals";
 export * from "./internships";
 export * from "./notes";
 export * from "./ai";
+export * from "./study";
 

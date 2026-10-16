@@ -15,6 +15,7 @@ import {
   Sliders,
   Layers,
   Award,
+  Check,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ import {
 } from "@/components/ui/card";
 import { useAuth } from "@/context/auth-context";
 import { apiClient, ApiError } from "@/lib/api-client";
-import type { Course, MyCourse } from "@/lib/types/courses";
+import type { Course, MyCourse, CourseLessonsProgress } from "@/lib/types/courses";
 
 function CourseDetailContent() {
   const router = useRouter();
@@ -39,6 +40,8 @@ function CourseDetailContent() {
 
   const [course, setCourse] = useState<Course | null>(null);
   const [enrolledRecord, setEnrolledRecord] = useState<MyCourse | null>(null);
+  const [lessonsProgress, setLessonsProgress] = useState<CourseLessonsProgress | null>(null);
+  const [togglingLessonId, setTogglingLessonId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +71,16 @@ function CourseDetailContent() {
         if (ignore) return;
         setCourse(courseData);
         setError(null);
+
+        // Fetch structured lesson milestones
+        try {
+          const lessonsData = await apiClient.getCourseLessons(courseId, token ?? undefined);
+          if (!ignore) {
+            setLessonsProgress(lessonsData);
+          }
+        } catch {
+          // Non-fatal
+        }
 
         if (token) {
           try {
@@ -122,8 +135,14 @@ function CourseDetailContent() {
     setError(null);
 
     try {
-      const courseData = await apiClient.getCourse(courseId);
+      const [courseData, lessonsData] = await Promise.all([
+        apiClient.getCourse(courseId),
+        apiClient.getCourseLessons(courseId, token ?? undefined).catch(() => null),
+      ]);
       setCourse(courseData);
+      if (lessonsData) {
+        setLessonsProgress(lessonsData);
+      }
 
       if (token) {
         try {
@@ -166,7 +185,15 @@ function CourseDetailContent() {
     setActionError(null);
 
     try {
-      const res = await apiClient.enrollCourse(courseId, token ?? undefined);
+      const [res, lessonsData] = await Promise.all([
+        apiClient.enrollCourse(courseId, token ?? undefined),
+        apiClient.getCourseLessons(courseId, token ?? undefined).catch(() => null),
+      ]);
+
+      if (lessonsData) {
+        setLessonsProgress(lessonsData);
+      }
+
       setActionSuccess("Successfully enrolled! You can now track your learning progress.");
       setEnrolledRecord({
         course_id: courseId,
@@ -192,7 +219,47 @@ function CourseDetailContent() {
     }
   };
 
-  // Handle progress update
+  // Handle milestone toggle
+  const handleToggleLesson = async (lessonId: number) => {
+    if (!token || !isAuthenticated) {
+      router.push(`/login?redirect=/courses/${courseId}`);
+      return;
+    }
+    if (!enrolledRecord) {
+      setActionError("Please enroll in this course first to track lesson milestones.");
+      return;
+    }
+
+    setTogglingLessonId(lessonId);
+    setActionSuccess(null);
+    setActionError(null);
+
+    try {
+      const updated = await apiClient.toggleCourseLesson(courseId, lessonId, token);
+      setLessonsProgress(updated);
+      setProgressValue(updated.progress_percent);
+      if (enrolledRecord) {
+        setEnrolledRecord({
+          ...enrolledRecord,
+          progress: updated.progress_percent,
+          completed: updated.completed,
+        });
+      }
+      setActionSuccess(
+        `Milestone updated: ${updated.completed_lessons} of ${updated.total_lessons} completed (${updated.progress_percent}%).`
+      );
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setActionError(err.message);
+      } else {
+        setActionError("Failed to update milestone status.");
+      }
+    } finally {
+      setTogglingLessonId(null);
+    }
+  };
+
+  // Handle manual progress update
   const handleSaveProgress = async () => {
     if (!token) return;
     setIsUpdatingProgress(true);
@@ -422,48 +489,135 @@ function CourseDetailContent() {
                 </div>
               </div>
 
-              {/* Course Syllabus Overview */}
-              <Card className="bg-[#11141E] border-[#202536]">
+              {/* Course Milestones & Curriculum */}
+              <Card className="bg-[#11141E] border-[#202536] shadow-xl">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base font-bold text-white flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-pink-400" />
-                    <span>Technical Syllabus & Core Competencies</span>
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-pink-400" />
+                      <span>Curriculum & Lesson Milestones</span>
+                    </CardTitle>
+                    {lessonsProgress && lessonsProgress.total_lessons > 0 && (
+                      <Badge variant="glow" className="text-xs">
+                        {lessonsProgress.completed_lessons} / {lessonsProgress.total_lessons} Completed ({lessonsProgress.progress_percent}%)
+                      </Badge>
+                    )}
+                  </div>
                   <CardDescription className="text-xs text-slate-400">
-                    Milestones and topics covered in this {course.duration_hours}-hour curriculum
+                    {isEnrolled
+                      ? "Check off lessons as you complete them to automatically calculate course progress and sync with your candidate cockpit."
+                      : `Structured syllabus covering key topics and practical labs for this ${course.duration_hours}-hour curriculum.`}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {[
-                    {
-                      module: "01",
-                      title: "Foundational Architecture & Setup",
-                      desc: "Environment setup, core paradigms, and syntax fundamentals.",
-                    },
-                    {
-                      module: "02",
-                      title: "Applied Engineering & Patterns",
-                      desc: "Real-world implementations, state management, and idiomatic patterns.",
-                    },
-                    {
-                      module: "03",
-                      title: "Production Optimization & Testing",
-                      desc: "Profiling performance, benchmark tests, and robust error handling.",
-                    },
-                  ].map((mod) => (
-                    <div
-                      key={mod.module}
-                      className="p-3.5 rounded-lg bg-[#090A0F] border border-[#1C2132] flex items-start gap-3.5"
-                    >
-                      <span className="w-7 h-7 rounded-md bg-pink-500/10 border border-pink-500/20 text-pink-400 font-mono text-xs font-bold flex items-center justify-center shrink-0">
-                        {mod.module}
-                      </span>
-                      <div>
-                        <p className="text-xs font-semibold text-white">{mod.title}</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">{mod.desc}</p>
+                  {lessonsProgress && lessonsProgress.lessons.length > 0 ? (
+                    lessonsProgress.lessons.map((lesson, idx) => {
+                      const isComplete = lesson.is_completed;
+                      const isToggling = togglingLessonId === lesson.id;
+
+                      return (
+                        <div
+                          key={lesson.id}
+                          className={`p-4 rounded-xl border transition-all ${
+                            isComplete
+                              ? "bg-emerald-500/5 border-emerald-500/30 text-white"
+                              : "bg-[#090A0F] border-[#1C2132] text-slate-200 hover:border-[#283048]"
+                          } flex items-start gap-3.5`}
+                        >
+                          {/* Checkbox button if enrolled, or order badge if not */}
+                          {isEnrolled ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleLesson(lesson.id)}
+                              disabled={isToggling}
+                              title={isComplete ? "Mark as incomplete" : "Mark as completed"}
+                              className={`mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-all ${
+                                isComplete
+                                  ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 hover:bg-emerald-600"
+                                  : "border-2 border-slate-600 hover:border-pink-500 text-transparent hover:text-pink-400/50"
+                              } ${isToggling ? "opacity-50 cursor-wait" : ""}`}
+                            >
+                              {isToggling ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
+                              ) : isComplete ? (
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              ) : (
+                                <span className="text-[10px] font-mono font-bold text-slate-500">
+                                  {idx + 1}
+                                </span>
+                              )}
+                            </button>
+                          ) : (
+                            <span className="mt-0.5 w-6 h-6 rounded-md bg-pink-500/10 border border-pink-500/20 text-pink-400 font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                              {String(idx + 1).padStart(2, "0")}
+                            </span>
+                          )}
+
+                          {/* Lesson Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <h4
+                                className={`text-xs font-semibold ${
+                                  isComplete ? "text-emerald-300 line-through decoration-emerald-500/60" : "text-white"
+                                }`}
+                              >
+                                {lesson.title}
+                              </h4>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
+                                  <Clock className="w-3 h-3 text-slate-500" />
+                                  {lesson.duration_minutes}m
+                                </span>
+                                {isComplete && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] py-0 px-1.5 border-emerald-500/40 text-emerald-300 bg-emerald-500/10"
+                                  >
+                                    Done
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                              {lesson.description}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    /* Fallback to general modules if course has no defined lessons */
+                    [
+                      {
+                        module: "01",
+                        title: "Foundational Architecture & Setup",
+                        desc: "Environment setup, core paradigms, and syntax fundamentals.",
+                      },
+                      {
+                        module: "02",
+                        title: "Applied Engineering & Patterns",
+                        desc: "Real-world implementations, state management, and idiomatic patterns.",
+                      },
+                      {
+                        module: "03",
+                        title: "Production Optimization & Testing",
+                        desc: "Profiling performance, benchmark tests, and robust error handling.",
+                      },
+                    ].map((mod) => (
+                      <div
+                        key={mod.module}
+                        className="p-3.5 rounded-lg bg-[#090A0F] border border-[#1C2132] flex items-start gap-3.5"
+                      >
+                        <span className="w-7 h-7 rounded-md bg-pink-500/10 border border-pink-500/20 text-pink-400 font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                          {mod.module}
+                        </span>
+                        <div>
+                          <p className="text-xs font-semibold text-white">{mod.title}</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">{mod.desc}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -508,8 +662,15 @@ function CourseDetailContent() {
                         <p className="text-[11px] text-slate-400 pt-1">
                           {enrolledRecord?.completed
                             ? "Course marked complete! Great achievement."
+                            : lessonsProgress && lessonsProgress.total_lessons > 0
+                            ? `${lessonsProgress.completed_lessons} of ${lessonsProgress.total_lessons} milestones completed (${lessonsProgress.progress_percent}%).`
                             : `${100 - (enrolledRecord?.progress ?? 0)}% remaining to completion.`}
                         </p>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-[#090A0F] border border-[#1C2132] text-[11px] text-slate-400 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-pink-400 shrink-0" />
+                        <span>Toggle milestones on the left to calculate and save progress.</span>
                       </div>
 
                       {/* Interactive Progress Slider */}

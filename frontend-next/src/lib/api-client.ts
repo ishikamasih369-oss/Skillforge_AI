@@ -34,6 +34,11 @@ import type {
   InterviewQuestionsResponse,
   CareerRoadmapRequest,
   CareerRoadmapResponse,
+  CourseLessonsProgress,
+  StudySession,
+  StudySessionStartRequest,
+  StudySessionUpdateRequest,
+  StudyStats,
 } from "./types/auth";
 
 export class ApiError extends Error {
@@ -285,6 +290,32 @@ export const apiClient = {
     return request<Course>("/api/courses/", {
       method: "POST",
       body: JSON.stringify(data),
+      token,
+    });
+  },
+
+  /**
+   * Fetch structured lesson milestones and completion progress for a course.
+   * Backend endpoint: GET /api/courses/{course_id}/lessons
+   */
+  async getCourseLessons(courseId: number, token?: string): Promise<CourseLessonsProgress> {
+    return request<CourseLessonsProgress>(`/api/courses/${courseId}/lessons`, {
+      method: "GET",
+      token,
+    });
+  },
+
+  /**
+   * Toggle completion of a specific lesson milestone, updating course progress.
+   * Backend endpoint: POST /api/courses/{course_id}/lessons/{lesson_id}/toggle
+   */
+  async toggleCourseLesson(
+    courseId: number,
+    lessonId: number,
+    token?: string
+  ): Promise<CourseLessonsProgress> {
+    return request<CourseLessonsProgress>(`/api/courses/${courseId}/lessons/${lessonId}/toggle`, {
+      method: "POST",
       token,
     });
   },
@@ -558,6 +589,121 @@ export const apiClient = {
     return request<CareerRoadmapResponse>("/api/ai/career-roadmap", {
       method: "POST",
       body: JSON.stringify(data),
+      token,
+    });
+  },
+
+  // ==========================================
+  // Study Sessions & Timer API Methods
+  // ==========================================
+
+  /**
+   * Retrieve active study session for the current user.
+   * Backend endpoint: GET /api/study-sessions/active
+   */
+  async getActiveStudySession(token?: string): Promise<StudySession | null> {
+    return request<StudySession | null>("/api/study-sessions/active", {
+      method: "GET",
+      token,
+    });
+  },
+
+  /**
+   * Start a new study session. Prevents multiple simultaneous sessions.
+   * Backend endpoint: POST /api/study-sessions/start
+   */
+  async startStudySession(
+    payload: StudySessionStartRequest,
+    token?: string
+  ): Promise<StudySession> {
+    return request<StudySession>("/api/study-sessions/start", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token,
+    });
+  },
+
+  /**
+   * Pause an active study session.
+   * Backend endpoint: POST /api/study-sessions/{sessionId}/pause
+   */
+  async pauseStudySession(sessionId: number, token?: string): Promise<StudySession> {
+    return request<StudySession>(`/api/study-sessions/${sessionId}/pause`, {
+      method: "POST",
+      token,
+    });
+  },
+
+  /**
+   * Resume a paused study session.
+   * Backend endpoint: POST /api/study-sessions/{sessionId}/resume
+   */
+  async resumeStudySession(sessionId: number, token?: string): Promise<StudySession> {
+    return request<StudySession>(`/api/study-sessions/${sessionId}/resume`, {
+      method: "POST",
+      token,
+    });
+  },
+
+  /**
+   * Stop and complete an active study session.
+   * Backend endpoint: POST /api/study-sessions/{sessionId}/stop
+   */
+  async stopStudySession(sessionId: number, token?: string): Promise<StudySession> {
+    return request<StudySession>(`/api/study-sessions/${sessionId}/stop`, {
+      method: "POST",
+      token,
+    });
+  },
+
+  /**
+   * Retrieve completed study session history.
+   * Backend endpoint: GET /api/study-sessions/
+   */
+  async getStudySessions(token?: string): Promise<StudySession[]> {
+    return request<StudySession[]>("/api/study-sessions/", {
+      method: "GET",
+      token,
+    });
+  },
+
+  /**
+   * Safely edit or correct an existing session duration or skill name.
+   * Backend endpoint: PUT /api/study-sessions/{sessionId}
+   */
+  async updateStudySession(
+    sessionId: number,
+    payload: StudySessionUpdateRequest,
+    token?: string
+  ): Promise<StudySession> {
+    return request<StudySession>(`/api/study-sessions/${sessionId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      token,
+    });
+  },
+
+  /**
+   * Delete an existing study session.
+   * Backend endpoint: DELETE /api/study-sessions/{sessionId}
+   */
+  async deleteStudySession(
+    sessionId: number,
+    token?: string
+  ): Promise<{ message: string; id: number }> {
+    return request<{ message: string; id: number }>(`/api/study-sessions/${sessionId}`, {
+      method: "DELETE",
+      token,
+    });
+  },
+
+  /**
+   * Fetch aggregated study statistics and daily streak.
+   * Backend endpoint: GET /api/study-sessions/stats
+   */
+  async getStudyStats(token?: string): Promise<StudyStats> {
+    return request<StudyStats>("/api/study-sessions/stats", {
+      method: "GET",
       token,
     });
   },

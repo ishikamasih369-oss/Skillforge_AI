@@ -12,6 +12,7 @@ from auth import router as auth_router
 from database import Base, engine
 from internships import router as internships_router
 from ai import router as ai_router
+from study_sessions import router as study_sessions_router
 
 import models
 
@@ -36,10 +37,26 @@ def get_allowed_origins() -> list[str]:
     return origins
 
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Ensure database tables and starter course catalog are initialized on startup."""
+    try:
+        from database import SessionLocal
+        from seed_courses import seed_starter_courses
+        with SessionLocal() as db:
+            seed_starter_courses(db)
+    except Exception:
+        pass
+    yield
+
+
 app = FastAPI(
     title="SkillForge AI API",
     description="Backend API for the SkillForge AI platform",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -56,7 +73,10 @@ app.include_router(goals_router)
 app.include_router(internships_router)
 app.include_router(notes_router)
 app.include_router(dashboard_router)
+app.include_router(study_sessions_router)
 app.include_router(ai_router)
+
+
 
 @app.get("/")
 def root():
